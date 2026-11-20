@@ -37,7 +37,7 @@ function ProfileCard() {
     <Card className="scroll-mt-24">
       <CardHeader>
         <CardTitle>Profile</CardTitle>
-        <CardDescription>How teammates will see you.</CardDescription>
+        <CardDescription>How teammates will see you(Nickname).</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="max-w-xl space-y-5">
