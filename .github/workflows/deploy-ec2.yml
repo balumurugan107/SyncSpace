@@ -1,0 +1,92 @@
+name: Deploy SyncSpace to EC2
+
+on:
+  workflow_run:
+    workflows: [CI and ECR publish]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish_run_id:
+        description: Successful CI/ECR run ID to deploy (also supports rollback)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: syncspace-ec2-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (vars.EC2_DEPLOY_ENABLED == 'true' && github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event != 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-07ba7b7856115e939
+      PUBLIC_ORIGIN: http://3.109.56.36
+    steps:
+      - name: Validate the published release
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id || inputs.publish_run_id }}
+          AUTOMATIC: ${{ github.event_name == 'workflow_run' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'Invalid run ID'; exit 1; }
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" > /tmp/publish-run.json
+          if [[ "$AUTOMATIC" == true ]]; then
+            latest=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci-ecr.yml/runs?branch=main&status=success&per_page=1" --jq '.workflow_runs[0].id')
+            if [[ "$latest" != "$SOURCE_RUN_ID" ]]; then
+              echo 'A newer successful release exists; skipping this queued deployment.'
+              echo 'skip=true' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          python3 - <<'PY'
+          import json, os, re
+          with open('/tmp/publish-run.json') as file:
+              run = json.load(file)
+          assert run['conclusion'] == 'success', 'Source run did not succeed'
+          assert run['path'] == '.github/workflows/ci-ecr.yml', 'Unexpected source workflow'
+          assert run['head_branch'] == 'main', 'Expected main branch'
+          assert run['event'] in ('push', 'workflow_dispatch'), 'Unexpected source event'
+          assert run['head_repository']['full_name'] == os.environ['GITHUB_REPOSITORY'], 'Wrong repository'
+          assert re.fullmatch('[0-9a-f]{40}', run['head_sha']), 'Invalid source commit'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as file:
+              file.write(f"sha={run['head_sha']}\n")
+              file.write(f"tag_suffix=sha-{run['head_sha']}-{run['id']}-{run['run_attempt']}\n")
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.source.outputs.skip != 'true'
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          persist-credentials: false
+      - name: Assume instance-scoped deployment role
+        if: steps.source.outputs.skip != 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_EC2_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: '190706546302'
+          retry-max-attempts: 3
+      - name: Deploy exact image digests and wait for health
+        if: steps.source.outputs.skip != 'true'
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          IMAGE_TAG_SUFFIX: ${{ steps.source.outputs.tag_suffix }}
+        run: python3 scripts/deploy-ec2-command.py

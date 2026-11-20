@@ -28,7 +28,7 @@ jobs:
       - name: Inspect target instance
         run: |
           aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
-            --query 'Reservations[].Instances[].{id:InstanceId,state:State.Name,type:InstanceType,publicIp:PublicIpAddress,architecture:Architecture,profile:IamInstanceProfile.Arn}'
+            --query 'Reservations[].Instances[].{id:InstanceId,state:State.Name,type:InstanceType,publicIp:PublicIpAddress,architecture:Architecture,profile:IamInstanceProfile.Arn,securityGroups:SecurityGroups,keyName:KeyName}'
           aws ssm get-connection-status --target "$INSTANCE_ID"
       - name: Inspect host prerequisites through SSM
         shell: bash

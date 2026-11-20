@@ -111,3 +111,12 @@ E2E_API_A=http://127.0.0.1:4004 E2E_API_B=http://127.0.0.1:4003 \
 `BROWSER_PATH` is optional if Playwright Chromium is installed (`npx playwright install chromium`). Missing replica variables explicitly skip this cross-instance test, rather than pretending one server proves scaling. Screenshots are written to ignored `frontend/test-results/`; traces are disabled to avoid recording authenticated sessions.
 
 If Redis's host port is occupied, set a free `REDIS_HOST_PORT` and update the localhost `REDIS_URL` in `.env`. This checkout uses **16379**; Docker-internal connections still use `redis:6379`. Live delivery can pause during Redis outages, while existing HTTP task and chat operations continue. The current notification toasts are transient; durable inbox/email/outbox work belongs to Phase 5.
+
+
+## GitHub Actions and ECR
+
+Pushes to `main` run frontend/backend checks, then publish API and web images to
+`190706546302.dkr.ecr.ap-south-1.amazonaws.com/syncspace` using short-lived AWS OIDC credentials.
+Pull requests run checks without publishing. Image tags include component, commit, run ID and attempt; image digests are recorded in the Actions summary.
+
+See [CI/ECR setup and EC2 status](docs/GITHUB_ACTIONS_ECR.md) for variables, scoped IAM policies, failure behavior and deployment prerequisites. A separate EC2 workflow deploys successful releases when `EC2_DEPLOY_ENABLED=true`, with migrations, health checks and previous-image restoration on failure. Bootstrap/preflight workflows handle host preparation and inspection.

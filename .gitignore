@@ -14,3 +14,7 @@ frontend/playwright-report/
 
 # Local design-skill reports and browser profiles
 .taste-skill/
+
+# Deployment tooling
+__pycache__/
+*.py[cod]

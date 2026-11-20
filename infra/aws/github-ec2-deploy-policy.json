@@ -40,6 +40,11 @@
           "iam:PassedToService": "ec2.amazonaws.com"
         }
       }
+    },
+    {
+      "Effect": "Allow",
+      "Action": "ecr:DescribeImages",
+      "Resource": "arn:aws:ecr:ap-south-1:190706546302:repository/syncspace"
     }
   ]
 }

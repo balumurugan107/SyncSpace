@@ -77,9 +77,31 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  deployment-checks:
+    name: Deployment checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s scripts/tests -v
+      - run: bash -n scripts/deploy-ec2.sh
+      - name: Validate EC2 Compose configuration
+        env:
+          POSTGRES_USER: syncspace
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: syncspace
+          REDIS_PASSWORD: ci-only-password
+          JWT_ACCESS_SECRET: ci-only-secret-at-least-32-characters
+          PUBLIC_ORIGIN: http://127.0.0.1
+          API_IMAGE: syncspace-api:validation
+          WEB_IMAGE: syncspace-web:validation
+        run: docker compose --env-file /dev/null -f deploy/compose.ec2.yml config --quiet
+
   publish:
     name: Publish ${{ matrix.component }}
-    needs: [backend, frontend]
+    needs: [backend, frontend, deployment-checks]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
