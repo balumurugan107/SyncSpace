@@ -1,0 +1,176 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* shadcn/ui design tokens. Components reference semantic names (bg-card,
+   text-muted-foreground, ...) so both themes come from these variables alone. */
+:root {
+  --radius: 0.75rem;
+  --background: oklch(0.975 0.004 250);
+  --foreground: oklch(0.24 0.025 260);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.51 0.21 260);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.95 0.008 250);
+  --secondary-foreground: oklch(0.34 0.025 260);
+  --muted: oklch(0.955 0.006 250);
+  --muted-foreground: oklch(0.49 0.023 260);
+  --accent: oklch(0.945 0.025 255);
+  --accent-foreground: oklch(0.4 0.15 260);
+  --destructive: oklch(0.55 0.2 25);
+  --success: oklch(0.46 0.12 160);
+  --warning: oklch(0.5 0.12 70);
+  --border: oklch(0.915 0.008 250);
+  --input: oklch(0.87 0.012 250);
+  --ring: var(--primary);
+  --sidebar: oklch(0.21 0.025 260);
+  --sidebar-border: oklch(0.31 0.02 260);
+}
+
+.dark {
+  --background: oklch(0.17 0.012 260);
+  --foreground: oklch(0.94 0.008 250);
+  --card: oklch(0.215 0.015 260);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.24 0.015 260);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.7 0.15 255);
+  --primary-foreground: oklch(0.16 0.035 260);
+  --secondary: oklch(0.285 0.015 260);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.26 0.015 260);
+  --muted-foreground: oklch(0.72 0.02 250);
+  --accent: oklch(0.29 0.045 255);
+  --accent-foreground: oklch(0.88 0.06 255);
+  --destructive: oklch(0.73 0.15 25);
+  --success: oklch(0.74 0.14 160);
+  --warning: oklch(0.79 0.13 80);
+  --border: oklch(0.31 0.016 260);
+  --input: oklch(0.38 0.02 260);
+  --ring: var(--primary);
+  --sidebar: oklch(0.14 0.018 260);
+  --sidebar-border: oklch(0.27 0.02 260);
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/InterVariable.woff2') format('woff2');
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-border: var(--sidebar-border);
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+}
+
+/* React Flow: inherit theme colours. */
+.react-flow {
+  --xy-background-color: transparent;
+  --xy-edge-stroke: var(--muted-foreground);
+  --xy-controls-button-background-color: var(--card);
+  --xy-controls-button-background-color-hover: var(--muted);
+  --xy-controls-button-color: var(--foreground);
+  --xy-controls-button-border-color: var(--border);
+  --xy-minimap-background-color: var(--card);
+}
+
+/* Shared application surfaces, used by feature screens without changing their state. */
+@layer components {
+  .page-content { @apply mx-auto w-full max-w-[1440px] space-y-7; }
+  .page-eyebrow { @apply mb-2 text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase; }
+  .surface-toolbar { @apply flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3; }
+  .section-heading { @apply flex flex-wrap items-center justify-between gap-3; }
+  .collection-card { @apply relative h-full overflow-hidden transition-[transform,box-shadow,border-color] duration-200 hover:border-primary/30 hover:shadow-md; }
+  .collection-mark { @apply flex size-12 shrink-0 items-center justify-center rounded-xl border border-primary/15 bg-primary/5 text-primary; }
+  .summary-strip { @apply mb-7 grid grid-cols-3 gap-px overflow-hidden rounded-2xl border bg-border; }
+  .summary-cell { @apply flex flex-col gap-1 bg-card px-3 py-4 sm:px-5; }
+  .section-label { @apply text-xs font-medium text-muted-foreground; }
+}
+
+@layer base {
+  button:not(:disabled), [role='button']:not([aria-disabled='true']) { cursor: pointer; }
+  ::selection { background: color-mix(in oklch, var(--primary) 18%, transparent); }
+  :focus-visible { outline-offset: 3px; }
+  table th { @apply h-11 border-b text-[11px] tracking-wide; }
+  table td { @apply py-3; }
+  tbody tr { transition: background-color 150ms; }
+  tbody tr:hover { background: color-mix(in oklch, var(--muted) 60%, transparent); }
+}
+
+@keyframes page-arrive { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: no-preference) {
+  .page-arrive { animation: page-arrive 240ms ease-out both; }
+  .collection-card:hover { transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+
+/* All text links have a clear keyboard indicator, including the auth links. */
+@layer base {
+  a:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-radius: 4px; }
+}
+
+/* Restore visible keyboard focus on the graph above the vendor reset stylesheet. */
+.react-flow .react-flow__node:focus,
+.react-flow .react-flow__node:focus-visible,
+.react-flow .react-flow__nodesselection-rect:focus,
+.react-flow .react-flow__nodesselection-rect:focus-visible {
+  outline: 2px solid var(--ring) !important;
+  outline-offset: 4px;
+  border-radius: var(--radius);
+}
+.react-flow .react-flow__edge:focus-visible {
+  outline: 2px solid var(--ring) !important;
+}
+.react-flow .react-flow__edge:focus-visible path {
+  stroke: var(--ring);
+  stroke-width: 3;
+}

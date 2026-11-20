@@ -1,0 +1,35 @@
+import {
+  Activity,
+  ChartColumn,
+  Cpu,
+  Database,
+  Globe,
+  HardDrive,
+  Layers,
+  Network,
+  Rabbit,
+  Radio,
+  Search,
+  Server,
+  Workflow,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react';
+import type { IconName } from './architecture-data';
+
+export const COMPONENT_ICONS: Record<IconName, LucideIcon> = {
+  browser: Globe,
+  web: Layers,
+  api: Server,
+  postgres: Database,
+  migrate: Workflow,
+  redis: Zap,
+  socket: Radio,
+  rabbitmq: Rabbit,
+  workers: Cpu,
+  minio: HardDrive,
+  elasticsearch: Search,
+  nginx: Network,
+  prometheus: ChartColumn,
+  grafana: Activity,
+};

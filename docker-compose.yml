@@ -1,0 +1,133 @@
+# SyncSpace - local environment (Phase 4)
+#
+#   ./scripts/init-env.sh        # first time only: creates .env with random secrets
+#   docker compose up --build -d # start everything
+#
+# Startup order is enforced with health checks:
+#   postgres + redis (healthy) -> migrate (completed) -> api x N (healthy) -> web
+#
+# Scale the API:  docker compose up -d --scale api=3   (default: API_REPLICAS=2)
+#
+# Later phases add: rabbitmq, minio (Phases 5-6), nginx, prometheus, grafana,
+# elasticsearch (Phase 7), nginx (Phase 8), monitoring (Phase 9).
+
+name: syncspace
+
+x-api-env: &api-env
+  NODE_ENV: production
+  DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  REDIS_URL: redis://:${REDIS_PASSWORD:?Run ./scripts/init-env.sh to update .env}@redis:6379/0
+  JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Run ./scripts/init-env.sh to create .env}
+  JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+  REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-7}
+  BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  CORS_ORIGINS: "http://localhost:${WEB_HOST_PORT:-5173},http://127.0.0.1:${WEB_HOST_PORT:-5173}"
+  # The web container's proxy sits in front of the API: trust one hop for client IPs.
+  TRUST_PROXY: 1
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Run ./scripts/init-env.sh to create .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./scripts/init-env.sh to create .env}
+      POSTGRES_DB: ${POSTGRES_DB:-syncspace}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      # Bound to localhost only: reachable for psql and the test suite, not from the network.
+      - 127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    # Everything SyncSpace keeps in Redis is either rebuildable (cache, heartbeats) or
+    # short-lived (rate-limit windows), so persistence is off. maxmemory + allkeys-lru
+    # makes Redis evict the least recently used keys instead of failing writes when full.
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:?Run ./scripts/init-env.sh to update .env}
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --save
+      - ''
+      - --appendonly
+      - 'no'
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    ports:
+      - 127.0.0.1:${REDIS_HOST_PORT:-6379}:6379
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-shot job: applies pending SQL migrations, then exits.
+  migrate:
+    build: ./backend
+    image: syncspace-api:local
+    command: ['node', 'dist/infrastructure/database/migrate-cli.js']
+    environment: *api-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  # Stateless API instances. Docker's DNS answers the name "api" with the IP of every
+  # replica; the web proxy spreads requests across them (see frontend/vite.config.ts).
+  api:
+    image: syncspace-api:local
+    build: ./backend
+    restart: unless-stopped
+    environment: *api-env
+    deploy:
+      replicas: ${API_REPLICAS:-2}
+    ports:
+      # Each replica gets a free host port from this range (see `docker compose ps`).
+      - 127.0.0.1:4001-4004:4000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:4000/api/health/ready > /dev/null || exit 1']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    stop_grace_period: 15s
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      API_PROXY_TARGET: http://api:4000
+    ports:
+      - 127.0.0.1:${WEB_HOST_PORT:-5173}:5173
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:5173/ > /dev/null || exit 1']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres-data:

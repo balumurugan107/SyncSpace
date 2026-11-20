@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+*.log
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Browser verification artifacts (can contain private workspace content)
+frontend/test-results/
+frontend/playwright-report/
+
+# Local design-skill reports and browser profiles
+.taste-skill/

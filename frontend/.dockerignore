@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+*.log
+.env
+.env.*
+!.env.example
+
+# Local browser/design verification output
+test-results
+playwright-report
+.taste-skill
