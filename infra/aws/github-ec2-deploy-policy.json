@@ -23,6 +23,23 @@
       "Effect": "Allow",
       "Action": "ssm:GetCommandInvocation",
       "Resource": "*"
+    },
+    {
+      "Sid": "BootstrapInstanceProfile",
+      "Effect": "Allow",
+      "Action": "ec2:AssociateIamInstanceProfile",
+      "Resource": "arn:aws:ec2:ap-south-1:190706546302:instance/i-07ba7b7856115e939"
+    },
+    {
+      "Sid": "PassOnlySyncSpaceInstanceRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::190706546302:role/SyncSpaceEc2Instance",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "ec2.amazonaws.com"
+        }
+      }
     }
   ]
 }

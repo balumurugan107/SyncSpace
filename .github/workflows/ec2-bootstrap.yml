@@ -1,0 +1,55 @@
+name: EC2 SSM bootstrap
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  connect:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-07ba7b7856115e939
+    steps:
+      - name: Assume instance-scoped setup role
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_EC2_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: '190706546302'
+          retry-max-attempts: 3
+      - name: Attach SyncSpace profile if no profile exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=arn:aws:iam::190706546302:instance-profile/SyncSpaceEc2Instance
+          current=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+            --query 'Reservations[0].Instances[0].IamInstanceProfile.Arn' --output text)
+          if [[ "$current" == None ]]; then
+            aws ec2 associate-iam-instance-profile --instance-id "$INSTANCE_ID" \
+              --iam-instance-profile Name=SyncSpaceEc2Instance
+          elif [[ "$current" != "$expected" ]]; then
+            echo '::error::Instance already has another profile; leaving it unchanged.'
+            exit 1
+          fi
+      - name: Wait for SSM connectivity
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..30}; do
+            status=$(aws ssm get-connection-status --target "$INSTANCE_ID" --query Status --output text)
+            if [[ "$status" == connected ]]; then
+              echo 'SSM connected. Run the EC2 deployment preflight next.'
+              exit 0
+            fi
+            sleep 10
+          done
+          echo '::error::SSM is still disconnected. Check agent installation/service and outbound HTTPS access to SSM endpoints.'
+          exit 1
