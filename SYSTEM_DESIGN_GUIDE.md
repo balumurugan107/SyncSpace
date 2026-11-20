@@ -671,55 +671,50 @@ The taller board layout exposed a geometric limitation of corner-only pointer co
 `docs/UI_REDESIGN_PLAN.md` maps each route/workflow to its presentation change. Playwright captures real-service pages at desktop/tablet/mobile sizes; its test-created workspace is cleaned up, and verification accounts remain local. Taste checker errors and application test outcomes are kept separate in the implementation tracker. This is local UI delivery; it does not assert production readiness, implement Phase 5 or change `CURRENT_PHASE`.
 
 
-## 17. Delivery pipeline — 2026-11-20
+## 17. Verified delivery pipeline and EC2 runtime — 2026-11-20
 
-The user-requested GitHub/ECR work adds build-time infrastructure without changing the Phase 4 runtime. Source: `.github/workflows/ci-ecr.yml`; configuration and exact IAM policies: `docs/GITHUB_ACTIONS_ECR.md` and `infra/aws/`. Hosted execution evidence belongs in the tracker.
-
-```mermaid
-flowchart LR
-    Source[PR / main push / manual run] --> Backend[Backend typecheck + tests + build]
-    Source --> Frontend[Frontend tests + TypeScript/build]
-    Stores[Disposable PostgreSQL 17 + Redis 7.4] --> Backend
-    Backend --> Gate{Both pass and main branch?}
-    Frontend --> Gate
-    Gate --> OIDC[GitHub OIDC token to AWS STS]
-    OIDC --> Role[SyncSpaceGitHubEcrPublish role]
-    Role --> Build[Build API and web Docker images]
-    Build --> ECR[syncspace ECR repository: distinct API/web tags and digests]
-    ECR -. SSM connection pending .-> Runtime[Future migration and service rollout job]
-```
-
-The role trusts only `repo:balumurugan107@74696482/SyncSpace@1463714917:ref:refs/heads/main` and audience `sts.amazonaws.com`; its ECR permissions are scoped to the selected repository, except the registry authorization-token API which requires `*`. The workflow checks AWS account `190706546302`. No long-lived AWS keys are stored in GitHub. PRs run application checks with read-only repository permissions; only publishing jobs request OIDC tokens. Action dependencies use pinned commit SHAs.
-
-Tests get ephemeral stores and run migrations in the isolated test database. Failed checks prevent image publication. Missing variables stop before authentication; IAM or ECR failures fail the publishing job. API/web matrix jobs may succeed independently, so deployments must promote both digests from a fully successful run. Each component uses `<component>-sha-<commit>-<run>-<attempt>` to support immutable tags and reruns. No `latest` tag is overwritten; there is no production rollback mechanism yet.
-
-Publishing does not run migrations or update services. The user selected EC2; the selected instance profile is attached, but SSM agent access and service placement remain unconfirmed. Runtime setup must resolve TLS, hostname/proxy behavior, secrets, durable database/Redis networking, architecture (currently amd64), migration-before-rollout, health and rollback. The existing frontend remains Vite preview. No new runtime node, API, UI navigation or health check is claimed for this build-time workflow.
-
-EC2 target: `i-07ba7b7856115e939`, no domain specified. A separate manual `.github/workflows/ec2-preflight.yml` assumes `SyncSpaceGitHubEc2Deploy`, reads instance metadata via EC2 and runs a read-only prerequisite inspection via SSM. Its command permissions name only the selected instance and AWS-RunShellScript; it does not expose environment-file contents. This role does not broaden the local IAM user permissions. Hosted ECR publication succeeded in run `44694249637`; EC2 rollout remains unverified.
-
-EC2 preflight run `44694663740` reached the selected running `t3.micro` (`x86_64`, public IP `3.109.56.36`) and found no instance profile. SSM reported `notconnected`; SendCommand failed with InvalidInstanceId before any host command ran. Added an explicit manual SSM bootstrap workflow which attaches only the new `SyncSpaceEc2Instance` profile when no profile exists and waits for connectivity; a different existing profile is preserved. The instance role uses AmazonSSMManagedInstanceCore plus ECR pull permissions scoped to `syncspace`. Bootstrap requires two narrowly scoped permissions on the GitHub EC2 role (associate this instance's profile and pass only this EC2 role); no local IAM user permissions changed. Host installation and application rollout remain pending connectivity.
-
-The updated action pins passed hosted run `44694647591` end to end. Bootstrap run `44694897599` attached the new instance profile; agent connectivity remains the prerequisite for running any host deployment command.
-
-### EC2 release flow
-
-SSM connectivity was restored by restarting the existing agent through authorized local SSH; Docker/Compose are installed. The automated release path is now implemented in source:
+The explicitly authorized GitHub/ECR/EC2 task adds delivery infrastructure around the Phase 4 application. It does not implement the full Phase 11 roadmap. Workflow source is under `.github/workflows/`; exact IAM policies are under `infra/aws/`; operations are documented in `docs/GITHUB_ACTIONS_ECR.md`.
 
 ```mermaid
 flowchart TD
-    Passed[Successful main CI and ECR run] --> Validate[Validate source run and latest-success ordering]
-    Validate --> Digests[Resolve matching API/web tags to immutable digests]
-    Digests --> SSM[Instance-scoped OIDC role sends SSM command]
-    SSM --> Host[EC2 releases directory; root-only secrets remain on host]
-    Host --> Pull[Instance profile pulls ECR images]
-    Pull --> Stores[Healthy private PostgreSQL and Redis]
-    Stores --> Migration[One-shot API image migration]
+    Source[PR / main push / manual CI run] --> Checks[Backend + frontend + deployment checks]
+    Stores[Disposable CI PostgreSQL and Redis] --> Checks
+    Checks --> Gate{All pass and main branch?}
+    Gate --> OIDC[GitHub OIDC to publishing role]
+    OIDC --> ECR[API/web image digests in syncspace ECR]
+    ECR --> Verify[Separate workflow validates successful source run]
+    Verify --> SSM[Instance-scoped deployment role sends SSM command]
+    SSM --> Host[EC2 release files; secrets stay on host]
+    Host --> Pull[EC2 instance role pulls exact digests]
+    Pull --> Ready[Private PostgreSQL and Redis healthy]
+    Ready --> Migration[One-shot API migration]
     Migration --> Replace[Replace API and web containers]
-    Replace --> Health{Readiness through web proxy}
-    Health -->|healthy| Record[Record successful image/configuration pair]
-    Health -->|failed| Restore[Restore previous API/web pair when available; fail run]
+    Replace --> Health{Web proxy readiness}
+    Health -->|healthy| Record[Record successful release]
+    Health -->|failed| Restore[Restore previous API/web pair if available; fail run]
 ```
 
-Migration failure stops before replacement. SQL is never automatically rolled back. The workflow and host lock serialize deployments, and automatic outdated queued releases skip. Exact source files accompany exact image digests over SSM; `.env` never leaves the instance. Deployment tests simulate pull failure, migration failure and failed-health restoration; they do not claim a real outage drill.
+Both GitHub roles trust the exact immutable subject `repo:balumurugan107@74696482/SyncSpace@1463714917:ref:refs/heads/main` and audience `sts.amazonaws.com`. The publishing role can upload/read only the selected ECR repository, except registry authorization-token access, which requires `*`. The deployment role resolves image metadata and sends commands only to instance `i-07ba7b7856115e939` using AWS-RunShellScript; bootstrap can associate/pass only the selected instance/profile role. EC2 has its own SSM management and repository-scoped ECR pull role. Local IAM-user permissions were not widened. Workflows enforce account `190706546302`; action dependencies are SHA-pinned.
 
-The EC2 Compose project is `syncspace-ec2`; one API/web pair fits the small host, and PostgreSQL stores durable data in its named volume. Only port 80 is exposed; web still proxies HTTP/WebSocket to the private API. Containers restart unless stopped, health checks gate release success, memory is bounded and JSON logs rotate. HTTP without TLS, the single host, Vite preview, lack of automated backups and non-rolling service replacement are explicit limits. Existing local Compose and product phase/API/schema contracts remain unchanged.
+Application checks use disposable stores and migrations. Failed checks block publication; PRs cannot publish or deploy. Image tags include component, full source commit, run ID and attempt, supporting immutable repositories and retries. API/web publication can independently fail, so only a fully successful source run is eligible for deployment. The deployment workflow validates workflow path, repository, main branch, event and success before checking out the source. Automatic outdated queued releases skip; GitHub concurrency plus a host lock serialize rollout. Manual dispatch can deploy an older eligible publishing run for rollback.
+
+Release files and image references travel through SSM, never runtime secrets. `/opt/syncspace/.env` is generated once with mode 0600. A failed pull stops before store/service changes. A failed migration stops before API/web replacement. Failed replacement health attempts the previous recorded image/configuration pair and reports failure. SQL migrations are not undone; future schema changes must preserve rollback compatibility. If command polling times out, inspect the SSM command before retrying. The initial release has no previous release to restore.
+
+### EC2 application topology
+
+```mermaid
+flowchart LR
+    Browser[Browser] -->|HTTP port 80| Web[web: Vite preview / proxy]
+    Web -->|private HTTP and WebSocket| API[one API instance]
+    API --> PG[(PostgreSQL 17 / named volume)]
+    API <--> Redis[(Redis 7.4 / transient state)]
+    Migrate[one-shot migration] --> PG
+```
+
+The public endpoint is **http://3.109.56.36** on a running Amazon Linux 2023 x86_64 `t3.micro`. `deploy/compose.ec2.yml` creates project `syncspace-ec2`; only web port 80 is published. PostgreSQL data persists in `syncspace-ec2_postgres-data`; SQL, Redis and API ports remain private to Docker. One API fits the 1 GB host. Memory is bounded, JSON logs rotate, containers restart unless stopped, and readiness includes the API through the web proxy. Redis retains fail-open/bypass behavior from the application; PostgreSQL remains authoritative.
+
+Initial setup attached the new instance profile, restarted the existing SSM agent via authorized local SSH, and installed Docker/Compose. No existing application containers or database volumes were replaced. The private key was never uploaded to GitHub. SSM preflight passed after agent restart; earlier disconnected/timeout attempts remain recorded in the tracker.
+
+**Verification:** CI/ECR `44696518156` and automatic deployment `44696676283` passed for source `639f88c`. Public readiness and four healthy containers were observed. A real browser/API smoke test verified login, workspace/project/task operations, WebSocket-driven board updates and persisted chat; its account/workspace were cleaned up. Five local simulated deployment tests cover pull/migration/health failures and preservation of secrets; no real rollback outage drill is claimed.
+
+**Limits:** HTTP only, no domain/TLS, current Vite preview serving, single host/API, replacement interruptions, no automated database backups or HA, and no load/soak verification. These are deployment limits, not a claim of production readiness. The local runtime, product phase, schema contracts, UI availability and Explorer data are unchanged.
