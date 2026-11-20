@@ -220,4 +220,6 @@ The user explicitly requested GitHub Actions, deployment automation and publishi
 - `backend/.dockerignore`, `frontend/.dockerignore`: exclude all `.env.*` except the example. No credentials are passed as build arguments.
 - `docs/GITHUB_ACTIONS_ECR.md`: account configuration, failure behavior and remaining runtime deployment work. GitHub credential-helper authentication/admin access and AWS identity were verified without logging credentials. AWS OIDC provider/role setup and hosted execution are tracked separately.
 - Local checks: 105 backend tests on disposable PostgreSQL/Redis, 38 frontend tests, TypeScript/builds, both Docker images and actionlint pass. Full browser E2E is not part of this workflow.
-- ECR is image storage; no runtime rollout, production migration or production health verification is implemented. The user has not identified ECS, EC2 or another runtime. Existing Vite preview/proxy limitations remain.
+- ECR is image storage; no runtime rollout, production migration or production health verification is implemented. The user selected EC2; its instance ID, SSM access, domain and database/Redis placement remain unconfirmed. EC2/SSM discovery is denied to the current local AWS identity. Existing Vite preview/proxy limitations remain.
+
+The publishing role uses GitHub’s immutable OIDC subject (owner/repository IDs included), verified through the repository API. Name-only subjects are insufficient for this repository. The initial hosted application checks passed; see the tracker for publication results.

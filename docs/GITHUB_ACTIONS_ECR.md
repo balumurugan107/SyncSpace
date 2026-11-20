@@ -1,6 +1,6 @@
 # GitHub Actions and AWS ECR
 
-Status (2026-11-20): workflow locally verified; remote execution/publishing evidence is recorded in `IMPLEMENTATION_TRACKER.md`. Runtime deployment awaits the target service details. GitHub authentication and admin access to `balumurugan107/SyncSpace` are verified. The AWS CLI identity authenticates in account `190706546302`, default region `ap-south-1`, but cannot call `ecr:DescribeRepositories`. The GitHub OIDC provider has been created; publishing role setup is recorded in the tracker.
+Status (2026-11-20): workflow locally verified; remote execution/publishing evidence is recorded in `IMPLEMENTATION_TRACKER.md`. Runtime deployment targets EC2 and awaits the instance/access/service details. GitHub authentication and admin access to `balumurugan107/SyncSpace` are verified. The AWS CLI identity authenticates in account `190706546302`, default region `ap-south-1`, but cannot call `ecr:DescribeRepositories`. The GitHub OIDC provider has been created; publishing role setup is recorded in the tracker.
 
 ## Workflow
 
@@ -25,7 +25,7 @@ Both images use `190706546302.dkr.ecr.ap-south-1.amazonaws.com/syncspace`. Tags 
 
 These are configuration values, not access keys. No `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` GitHub secret is needed. Protect `main` and restrict who can change workflows. If the publishing branch changes, update both workflow and IAM subject. If adding a GitHub environment, its OIDC subject changes and the trust policy must be updated before enabling it.
 
-Trust policy (standard AWS partition):
+Trust policy (standard AWS partition): this repository enables GitHub immutable OIDC subjects. Its API reports the prefix `repo:balumurugan107@74696482/SyncSpace@1463714917`; the exact IDs must be retained. A name-only subject will be denied.
 
 ```json
 {
@@ -36,7 +36,7 @@ Trust policy (standard AWS partition):
     "Action": "sts:AssumeRoleWithWebIdentity",
     "Condition": {"StringEquals": {
       "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-      "token.actions.githubusercontent.com:sub": "repo:OWNER/REPOSITORY:ref:refs/heads/main"
+      "token.actions.githubusercontent.com:sub": "repo:balumurugan107@74696482/SyncSpace@1463714917:ref:refs/heads/main"
     }}
   }]
 }
@@ -72,7 +72,7 @@ The administrator provisioning IAM/ECR needs separate setup permissions. The loc
 
 ## Runtime deployment still required
 
-ECR stores images; publishing does not start or update the application. Supply the runtime target (ECS/Fargate, EC2, Kubernetes, etc.) and its identifiers before adding a rollout job. The workflow currently ends after publication. It does not deploy the database or execute production migrations.
+ECR stores images; publishing does not start or update the application. The user selected EC2. Supply the instance ID, SSM management status, URL/domain and PostgreSQL/Redis placement before adding the rollout job. Discovery calls for EC2 and SSM are currently denied. SSM Run Command is the intended transport when the instance is managed; it needs a separate role scoped to that specific instance and command document. Runtime secrets must stay on the instance or in a secret store, not in SSM command text. The workflow currently ends after publication. It does not deploy the database or execute production migrations.
 
 The rollout must use a matched API/web digest pair, run the API image's `npm run migrate` as a one-shot job with database access, stop on migration failure, update services, wait for health, and support returning to previous image digests. Database changes require compatible forward migrations; rolling back an image does not undo SQL. Runtime secrets belong in the target's secret store, never in image build arguments.
 

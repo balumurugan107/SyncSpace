@@ -686,11 +686,11 @@ flowchart LR
     OIDC --> Role[SyncSpaceGitHubEcrPublish role]
     Role --> Build[Build API and web Docker images]
     Build --> ECR[syncspace ECR repository: distinct API/web tags and digests]
-    ECR -. runtime target still unspecified .-> Runtime[Future migration and service rollout job]
+    ECR -. EC2 details pending .-> Runtime[Future migration and service rollout job]
 ```
 
-The role trusts only `repo:balumurugan107/SyncSpace:ref:refs/heads/main` and audience `sts.amazonaws.com`; its ECR permissions are scoped to the selected repository, except the registry authorization-token API which requires `*`. The workflow checks AWS account `190706546302`. No long-lived AWS keys are stored in GitHub. PRs run application checks with read-only repository permissions; only publishing jobs request OIDC tokens. Action dependencies use pinned commit SHAs.
+The role trusts only `repo:balumurugan107@74696482/SyncSpace@1463714917:ref:refs/heads/main` and audience `sts.amazonaws.com`; its ECR permissions are scoped to the selected repository, except the registry authorization-token API which requires `*`. The workflow checks AWS account `190706546302`. No long-lived AWS keys are stored in GitHub. PRs run application checks with read-only repository permissions; only publishing jobs request OIDC tokens. Action dependencies use pinned commit SHAs.
 
 Tests get ephemeral stores and run migrations in the isolated test database. Failed checks prevent image publication. Missing variables stop before authentication; IAM or ECR failures fail the publishing job. API/web matrix jobs may succeed independently, so deployments must promote both digests from a fully successful run. Each component uses `<component>-sha-<commit>-<run>-<attempt>` to support immutable tags and reruns. No `latest` tag is overwritten; there is no production rollback mechanism yet.
 
-Publishing does not run migrations or update services. Runtime selection must resolve TLS, hostname/proxy behavior, secrets, durable database/Redis networking, architecture (currently amd64), migration-before-rollout, health and rollback. The existing frontend remains Vite preview. No new runtime node, API, UI navigation or health check is claimed for this build-time workflow.
+Publishing does not run migrations or update services. The user selected EC2; instance access and placement remain unconfirmed. Runtime setup must resolve TLS, hostname/proxy behavior, secrets, durable database/Redis networking, architecture (currently amd64), migration-before-rollout, health and rollback. The existing frontend remains Vite preview. No new runtime node, API, UI navigation or health check is claimed for this build-time workflow.
