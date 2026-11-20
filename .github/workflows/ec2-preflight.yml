@@ -1,0 +1,63 @@
+name: EC2 deployment preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-07ba7b7856115e939
+    steps:
+      - name: Assume scoped EC2 deployment role
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_EC2_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: '190706546302'
+          retry-max-attempts: 3
+      - name: Inspect target instance
+        run: |
+          aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+            --query 'Reservations[].Instances[].{id:InstanceId,state:State.Name,type:InstanceType,publicIp:PublicIpAddress,architecture:Architecture,profile:IamInstanceProfile.Arn}'
+          aws ssm get-connection-status --target "$INSTANCE_ID"
+      - name: Inspect host prerequisites through SSM
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          commands = [
+              'set -eu',
+              'uname -m',
+              'cat /etc/os-release',
+              'df -h /',
+              'command -v docker || true',
+              'docker --version || true',
+              'docker compose version || true',
+              'docker ps --format "{{.Names}} {{.Ports}}" || true',
+              'test ! -d /opt/syncspace || echo "SyncSpace directory already exists"',
+              'test ! -f /opt/syncspace/.env || echo "SyncSpace environment file already exists"',
+          ]
+          with open('/tmp/ssm-parameters.json', 'w') as file:
+              json.dump({'commands': commands, 'executionTimeout': ['120']}, file)
+          PY
+          command_id=$(aws ssm send-command --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript --parameters file:///tmp/ssm-parameters.json \
+            --comment 'SyncSpace read-only deployment prerequisite inspection' \
+            --query Command.CommandId --output text)
+          if ! aws ssm wait command-executed --command-id "$command_id" --instance-id "$INSTANCE_ID"; then
+            aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID"
+            exit 1
+          fi
+          aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+            --query '{status:Status,output:StandardOutputContent,errors:StandardErrorContent}'

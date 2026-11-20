@@ -223,3 +223,5 @@ The user explicitly requested GitHub Actions, deployment automation and publishi
 - ECR is image storage; no runtime rollout, production migration or production health verification is implemented. The user selected EC2; its instance ID, SSM access, domain and database/Redis placement remain unconfirmed. EC2/SSM discovery is denied to the current local AWS identity. Existing Vite preview/proxy limitations remain.
 
 The publishing role uses GitHub’s immutable OIDC subject (owner/repository IDs included), verified through the repository API. Name-only subjects are insufficient for this repository. The initial hosted application checks passed; see the tracker for publication results.
+
+Hosted run `44694249637` passed both application jobs and both ECR publication jobs. EC2 target is now `i-07ba7b7856115e939` with no domain yet; `.github/workflows/ec2-preflight.yml` inspects it through a separate, instance-scoped OIDC role (`infra/aws/github-ec2-deploy-policy.json`). It is read-only host inspection, not a rollout. Updated action pins are tracked separately from the first successful publication.

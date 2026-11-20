@@ -88,3 +88,7 @@ The existing web image uses Vite preview and `API_PROXY_TARGET` for HTTP/WebSock
 - CI currently covers unit/integration tests and application builds. The existing multi-container browser suite is not wired into this workflow.
 
 References: [GitHub OIDC with AWS](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws), [AWS ECR login action](https://github.com/aws-actions/amazon-ecr-login), [Docker build/push action](https://github.com/docker/build-push-action).
+
+## EC2 preflight
+
+Target: `i-07ba7b7856115e939`, no domain yet. `ec2-preflight.yml` can be manually dispatched on `main` to inspect instance state, architecture, public IP, instance profile, SSM connectivity, Docker availability and running container names/ports. It does not read environment files or deploy anything. `AWS_EC2_DEPLOY_ROLE_ARN` selects the separate instance-scoped role `arn:aws:iam::190706546302:role/SyncSpaceGitHubEc2Deploy`; its exact policy is under `infra/aws/github-ec2-deploy-policy.json`. An SSM-managed instance and appropriate host networking/instance permissions are prerequisites. Runtime deployment remains pending this inspection and configuration.
